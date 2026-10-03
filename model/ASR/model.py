@@ -78,6 +78,28 @@ def load_audio(path, target_rate: int = 16000):
     return prepare_waveform(torch.from_numpy(audio.T.copy()), int(rate), target_rate), target_rate
 
 
+def load_manifest_audio(row: dict, manifest_dir, target_rate: int = 16000):
+    """Read WAV/FLAC or a bounded float32 segment from a prepared waveform shard.
+
+    Offsets/counts are in samples, not bytes. Packed files are mono little-endian
+    float32 PCM; workers read only their segment (no shared mutable file cursor).
+    """
+    from pathlib import Path
+    if row.get("audio_format") != "f32le":
+        return load_audio(Path(manifest_dir) / row["audio_ref"], target_rate)
+    import numpy as np
+    path = (Path(manifest_dir) / row["audio_ref"]).resolve()
+    offset, count = row["audio_offset"], row["num_samples"]
+    if type(offset) is not int or offset < 0 or type(count) is not int or count <= 0:
+        raise ValueError("Invalid waveform shard offset/count")
+    if row.get("channels") != 1 or row.get("sample_rate") != target_rate:
+        raise ValueError("Packed waveform profile disagrees with audio config")
+    if path.stat().st_size % 4 or (offset + count) * 4 > path.stat().st_size:
+        raise ValueError("Truncated waveform shard")
+    values = np.fromfile(path, dtype="<f4", count=count, offset=offset * 4)
+    return prepare_waveform(torch.from_numpy(values), target_rate, target_rate), target_rate
+
+
 def feature_length(sample_count: int, audio_config: dict) -> int:
     return max(0, (sample_count - audio_config["n_fft"]) // audio_config["hop_length"] + 1)
 

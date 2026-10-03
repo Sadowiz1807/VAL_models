@@ -40,6 +40,9 @@ def create_config() -> dict:
             "gradient_clip_norm": 1.0, "max_epochs": 100,
             "num_workers": 0, "amp": "off", "seed": 42,
             "scheduler": "cosine", "bucket_by_length": True,
+            "allow_unknown_speakers": False, "metadata_audit": False,
+            "valid_batch_size": 16, "pin_memory": False, "persistent_workers": False,
+            "prefetch_factor": 2, "patience": 6, "min_delta": 0.0001,
         },
     }
 
@@ -95,6 +98,14 @@ def validate_config(config: dict) -> None:
         raise ValueError("Unsupported AMP/scheduler setting")
     if type(t["seed"]) is not int or type(t["bucket_by_length"]) is not bool:
         raise ValueError("Invalid seed/bucketing setting")
+    for key in ("allow_unknown_speakers", "metadata_audit", "pin_memory", "persistent_workers"):
+        if key in t and type(t[key]) is not bool:
+            raise ValueError(f"{key} must be boolean")
+    for key in ("valid_batch_size", "prefetch_factor", "patience"):
+        if key in t:
+            _positive_int(t[key], key)
+    if "min_delta" in t and (not math.isfinite(t["min_delta"]) or t["min_delta"] < 0):
+        raise ValueError("min_delta must be finite and nonnegative")
 
 
 def config_hash(config: dict) -> str:
